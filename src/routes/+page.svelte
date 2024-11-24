@@ -8,9 +8,13 @@
 	let error: string | null = null;
 	let permissionStatus: string | null = null;
 
+	// Convert kilometers to miles
+	function kmToMiles(km: number): number {
+		return km * 0.621371;
+	}
+
 	async function checkLocationPermission() {
 		try {
-			// Check if the browser supports the permissions API
 			if (navigator.permissions && navigator.permissions.query) {
 				const result = await navigator.permissions.query({ name: 'geolocation' });
 				permissionStatus = result.state;
@@ -33,7 +37,6 @@
 		return 'Please enable location services in your browser settings for this website';
 	}
 
-	// Calculate distance between two points using Haversine formula
 	function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
 		const R = 6371e3; // Earth's radius in meters
 		const φ1 = (lat1 * Math.PI) / 180;
@@ -70,7 +73,6 @@
 		}
 
 		try {
-			// First, try to get a single position to trigger the permission prompt
 			await new Promise((resolve, reject) => {
 				navigator.geolocation.getCurrentPosition(resolve, reject, {
 					enableHighAccuracy: true,
@@ -78,7 +80,6 @@
 				});
 			});
 
-			// If we get here, permission was granted, so start watching
 			watchId = navigator.geolocation.watchPosition(
 				(position) => {
 					error = null;
@@ -86,14 +87,11 @@
 				},
 				(err) => {
 					if (err.code === 1) {
-						// PERMISSION_DENIED
 						error = `Location permission denied.\n\n${getPermissionInstructions()}`;
 					} else if (err.code === 2) {
-						// POSITION_UNAVAILABLE
 						error =
 							'Unable to determine your location. Please check if location services are enabled.';
 					} else if (err.code === 3) {
-						// TIMEOUT
 						error = 'Location request timed out. Please try again.';
 					} else {
 						error = `Error: ${err.message}`;
@@ -109,7 +107,6 @@
 		} catch (err) {
 			if (err instanceof GeolocationPositionError) {
 				if (err.code === 1) {
-					// PERMISSION_DENIED
 					error = `Location permission denied.\n\n${getPermissionInstructions()}`;
 				} else {
 					error = `Error starting tracking: ${err.message}`;
@@ -148,9 +145,12 @@
 		</div>
 	{/if}
 
-	<div class="mb-4">
+	<div class="mb-4 space-y-2">
 		<p class="text-xl">
 			Distance: {(distance / 1000).toFixed(2)} km
+		</p>
+		<p class="text-xl">
+			Distance: {kmToMiles(distance / 1000).toFixed(2)} miles
 		</p>
 	</div>
 
