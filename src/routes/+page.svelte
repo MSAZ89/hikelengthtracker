@@ -8,9 +8,53 @@
 	let error: string | null = null;
 	let permissionStatus: string | null = null;
 
-	// Convert kilometers to miles
+	// Time tracking variables
+	let startTime: Date | null = null;
+	let endTime: Date | null = null;
+	let elapsedTimeInterval: number;
+	let currentElapsedTime = '00:00:00';
+
 	function kmToMiles(km: number): number {
 		return km * 0.621371;
+	}
+
+	// Format a date to local time string
+	function formatDateTime(date: Date): string {
+		return date.toLocaleTimeString() + ' ' + date.toLocaleDateString();
+	}
+
+	// Format elapsed time as HH:MM:SS
+	function formatElapsedTime(start: Date): string {
+		const elapsed = new Date(Date.now() - start.getTime());
+		const hours = Math.floor(elapsed.getTime() / (1000 * 60 * 60));
+		const minutes = elapsed.getMinutes().toString().padStart(2, '0');
+		const seconds = elapsed.getSeconds().toString().padStart(2, '0');
+		return `${hours}:${minutes}:${seconds}`;
+	}
+
+	// Update elapsed time while tracking
+	function startElapsedTimeCounter() {
+		if (startTime) {
+			elapsedTimeInterval = window.setInterval(() => {
+				currentElapsedTime = formatElapsedTime(startTime!);
+			}, 1000);
+		}
+	}
+
+	function stopElapsedTimeCounter() {
+		if (elapsedTimeInterval) {
+			clearInterval(elapsedTimeInterval);
+		}
+	}
+
+	// Reset all tracking data
+	function resetTracking() {
+		distance = 0;
+		positions = [];
+		startTime = null;
+		endTime = null;
+		currentElapsedTime = '00:00:00';
+		error = null;
 	}
 
 	async function checkLocationPermission() {
@@ -38,7 +82,7 @@
 	}
 
 	function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-		const R = 6371e3; // Earth's radius in meters
+		const R = 6371e3;
 		const φ1 = (lat1 * Math.PI) / 180;
 		const φ2 = (lat2 * Math.PI) / 180;
 		const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -79,6 +123,11 @@
 					timeout: 5000
 				});
 			});
+
+			// Set start time and begin elapsed time counter
+			startTime = new Date();
+			endTime = null;
+			startElapsedTimeCounter();
 
 			watchId = navigator.geolocation.watchPosition(
 				(position) => {
@@ -121,6 +170,8 @@
 		if (watchId) {
 			navigator.geolocation.clearWatch(watchId);
 			tracking = false;
+			endTime = new Date();
+			stopElapsedTimeCounter();
 		}
 	}
 
@@ -145,13 +196,24 @@
 		</div>
 	{/if}
 
-	<div class="mb-4 space-y-2">
+	<div class="mb-6 space-y-2">
 		<p class="text-xl">
 			Distance: {(distance / 1000).toFixed(2)} km
 		</p>
 		<p class="text-xl">
 			Distance: {kmToMiles(distance / 1000).toFixed(2)} miles
 		</p>
+
+		<!-- Time information -->
+		<div class="mt-4 space-y-1">
+			{#if startTime}
+				<p>Start Time: {formatDateTime(startTime)}</p>
+			{/if}
+			{#if endTime}
+				<p>End Time: {formatDateTime(endTime)}</p>
+			{/if}
+			<p class="font-semibold">Elapsed Time: {currentElapsedTime}</p>
+		</div>
 	</div>
 
 	<div class="space-x-4">
@@ -170,5 +232,14 @@
 				Stop Tracking
 			</button>
 		{/if}
+
+		<!-- Reset button -->
+		<button
+			class="rounded bg-gray-500 px-4 py-2 font-bold text-white hover:bg-gray-700"
+			on:click={resetTracking}
+			disabled={tracking}
+		>
+			Reset
+		</button>
 	</div>
 </div>
