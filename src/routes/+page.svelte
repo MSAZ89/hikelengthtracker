@@ -6,6 +6,32 @@
 	let positions: GeolocationPosition[] = [];
 	let watchId: number;
 	let error: string | null = null;
+	let permissionStatus: string | null = null;
+
+	async function checkLocationPermission() {
+		try {
+			// Check if the browser supports the permissions API
+			if (navigator.permissions && navigator.permissions.query) {
+				const result = await navigator.permissions.query({ name: 'geolocation' });
+				permissionStatus = result.state;
+
+				result.addEventListener('change', () => {
+					permissionStatus = result.state;
+				});
+			}
+		} catch (err) {
+			console.log('Permissions API not supported');
+		}
+	}
+
+	function getPermissionInstructions(): string {
+		if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+			return "To enable location tracking on iOS:\n1. Go to Settings\n2. Scroll down to Safari\n3. Tap 'Location'\n4. Select 'Allow' for this website";
+		} else if (/Android/.test(navigator.userAgent)) {
+			return 'To enable location tracking on Android:\n1. Open browser settings\n2. Go to Site settings > Location\n3. Enable location access for this website';
+		}
+		return 'Please enable location services in your browser settings for this website';
+	}
 
 	// Calculate distance between two points using Haversine formula
 	function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -23,7 +49,6 @@
 		return R * c;
 	}
 
-	// Update total distance when new position is received
 	function updateDistance(position: GeolocationPosition) {
 		if (positions.length > 0) {
 			const lastPos = positions[positions.length - 1];
@@ -38,21 +63,41 @@
 		positions = [...positions, position];
 	}
 
-	// Start tracking
-	function startTracking() {
+	async function startTracking() {
 		if (!navigator.geolocation) {
 			error = 'Geolocation is not supported by your browser';
 			return;
 		}
 
 		try {
+			// First, try to get a single position to trigger the permission prompt
+			await new Promise((resolve, reject) => {
+				navigator.geolocation.getCurrentPosition(resolve, reject, {
+					enableHighAccuracy: true,
+					timeout: 5000
+				});
+			});
+
+			// If we get here, permission was granted, so start watching
 			watchId = navigator.geolocation.watchPosition(
 				(position) => {
 					error = null;
 					updateDistance(position);
 				},
 				(err) => {
-					error = `Error: ${err.message}`;
+					if (err.code === 1) {
+						// PERMISSION_DENIED
+						error = `Location permission denied.\n\n${getPermissionInstructions()}`;
+					} else if (err.code === 2) {
+						// POSITION_UNAVAILABLE
+						error =
+							'Unable to determine your location. Please check if location services are enabled.';
+					} else if (err.code === 3) {
+						// TIMEOUT
+						error = 'Location request timed out. Please try again.';
+					} else {
+						error = `Error: ${err.message}`;
+					}
 				},
 				{
 					enableHighAccuracy: true,
@@ -61,24 +106,20 @@
 				}
 			);
 			tracking = true;
-
-			// Register service worker for background tracking
-			if ('serviceWorker' in navigator) {
-				navigator.serviceWorker
-					.register('/service-worker.js')
-					.then((registration) => {
-						console.log('ServiceWorker registration successful');
-					})
-					.catch((err) => {
-						console.error('ServiceWorker registration failed:', err);
-					});
-			}
 		} catch (err) {
-			error = `Error starting tracking: ${err}`;
+			if (err instanceof GeolocationPositionError) {
+				if (err.code === 1) {
+					// PERMISSION_DENIED
+					error = `Location permission denied.\n\n${getPermissionInstructions()}`;
+				} else {
+					error = `Error starting tracking: ${err.message}`;
+				}
+			} else {
+				error = `Error starting tracking: ${err}`;
+			}
 		}
 	}
 
-	// Stop tracking
 	function stopTracking() {
 		if (watchId) {
 			navigator.geolocation.clearWatch(watchId);
@@ -86,8 +127,8 @@
 		}
 	}
 
-	// Clean up on unmount
 	onMount(() => {
+		checkLocationPermission();
 		return () => {
 			if (tracking) {
 				stopTracking();
@@ -100,7 +141,9 @@
 	<h1 class="mb-4 text-2xl font-bold">Hike Distance Tracker</h1>
 
 	{#if error}
-		<div class="mb-4 rounded border border-red-400 bg-red-100 px-4 py-3 text-red-700">
+		<div
+			class="mb-4 whitespace-pre-line rounded border border-red-400 bg-red-100 px-4 py-3 text-red-700"
+		>
 			{error}
 		</div>
 	{/if}
